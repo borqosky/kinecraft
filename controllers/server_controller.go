@@ -55,7 +55,6 @@ func (r *ServerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	var mcServer minecraftv1alpha1.Server
 	if err := r.Get(ctx, req.NamespacedName, &mcServer); err != nil {
-		log.Error(err, "unable to fetch Server")
 		return ctrl.Result{}, ignoreNotFound(err)
 	}
 
@@ -67,12 +66,14 @@ func (r *ServerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.Create(ctx, pod); err != nil {
-		log.Error(err, "unable to create Pod for Server run", "pod", pod)
-		return ctrl.Result{}, err
+	podNames := fmt.Sprintf("mc-%s", mcServer.Name)
+	if p := r.Get(ctx, client.ObjectKey{Namespace: mcServer.Namespace, Name: podNames}, pod); p == nil {
+		if err := r.Create(ctx, pod); err != nil {
+			log.Error(err, "unable to create Pod for Server run", "pod", pod)
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("created Pod for Server run", "pod", pod)
 	}
-
-	log.V(1).Info("created Pod for Server run", "pod", pod)
 	return ctrl.Result{}, nil
 }
 
