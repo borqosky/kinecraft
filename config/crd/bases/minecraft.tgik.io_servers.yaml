@@ -11,6 +11,8 @@ spec:
     kind: Server
     plural: servers
   scope: ""
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: Server is the Schema for the servers API
@@ -54,6 +56,14 @@ spec:
           type: object
         status:
           description: ServerStatus defines the observed state of Server
+          properties:
+            podName:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "make" to regenerate code after modifying
+                this file'
+              type: string
+            running:
+              type: boolean
           type: object
       type: object
   version: v1alpha1

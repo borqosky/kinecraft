@@ -48,6 +48,7 @@ func ignoreNotFound(err error) error {
 
 var (
 	ownerKey = ".metadata.controller"
+	apiGVStr = minecraftv1alpha1.GroupVersion.String()
 )
 
 // +kubebuilder:rbac:groups=minecraft.tgik.io,resources=servers,verbs=get;list;watch;create;update;patch;delete
@@ -73,29 +74,48 @@ func (r *ServerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	pod, err := r.constructPod(&mcServer)
-	if err != nil {
-		return ctrl.Result{}, err
+	// TODO: What if we have Pod doesn't match our spec? Recreate?
+
+	if len(childPods.Items) > 1 {
+		// TODO: Delete the extra pods
 	}
 
-	if err := r.Create(ctx, pod); err != nil {
-		log.Error(err, "unable to create Pod for Server run", "pod", pod)
+	var pod *core.Pod
+	if len(childPods.Items) == 0 {
+		// Delete the extra pods
+		var err error
+		pod, err = r.constructPod(&mcServer)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.Create(ctx, pod); err != nil {
+			log.Error(err, "unable to create Pod for Server run", "pod", pod)
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("created Pod for Server run", "pod", pod)
+	} else {
+		pod = &childPods.Items[0]
+	}
+	mcServer.Status.PodName = pod.Name
+	mcServer.Status.Running = (pod.Status.Phase == core.PodRunning)
+
+	if err := r.Status().Update(ctx, &mcServer); err != nil {
+		log.Error(err, "unable to update Minecraft Server status")
 		return ctrl.Result{}, err
 	}
-
-	log.V(1).Info("created Pod for Server run", "pod", pod)
 	return ctrl.Result{}, nil
 }
 
 func (r *ServerReconciler) constructPod(s *minecraftv1alpha1.Server) (*core.Pod, error) {
-	namePrefix := fmt.Sprintf("mc-%s", s.Name)
+	namePrefix := fmt.Sprintf("mc-%s-", s.Name)
 	pod := &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      make(map[string]string),
 			Annotations: make(map[string]string),
-			Name:        namePrefix,
+			//Name:        namePrefix,
 			// TODO GeneratedName -- we can add this back when we test for existence
-			Namespace: s.Namespace,
+			GenerateName: namePrefix,
+			Namespace:    s.Namespace,
 		},
 		// containers:
 		// - image: itzg/minecraft-server
@@ -154,8 +174,27 @@ func (r *ServerReconciler) constructPod(s *minecraftv1alpha1.Server) (*core.Pod,
 }
 
 func (r *ServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	//TODO Make sure that we are getting kicked on pod changing also
+
+	if err := mgr.GetFieldIndexer().IndexField(&core.Pod{}, ownerKey, func(rawObj runtime.Object) []string {
+		// grab the pod object, extract the owner...
+		pod := rawObj.(*core.Pod)
+		owner := metav1.GetControllerOf(pod)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a Server...
+		if owner.APIVersion != apiGVStr || owner.Kind != "Server" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&minecraftv1alpha1.Server{}).
+		Owns(&core.Pod{}).
 		Complete(r)
 }

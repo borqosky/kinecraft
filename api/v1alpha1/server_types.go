@@ -44,9 +44,12 @@ type ServerSpec struct {
 type ServerStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	PodName string `json:"podName,omitempty"`
+	Running bool   `json:"running,omitempty"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // Server is the Schema for the servers API
 type Server struct {
