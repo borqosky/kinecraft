@@ -46,6 +46,10 @@ func ignoreNotFound(err error) error {
 	return err
 }
 
+var (
+	ownerKey = ".metadata.controller"
+)
+
 // +kubebuilder:rbac:groups=minecraft.tgik.io,resources=servers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=minecraft.tgik.io,resources=servers/status,verbs=get;update;patch
 // TODO: (wlobo) list RBAC stuff
@@ -59,8 +63,15 @@ func (r *ServerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, ignoreNotFound(err)
 	}
 
-	// TODO: List out the Pods that belong to this server and update the status
+	// TODO: List out the Pods that belong to this server and update
 	// the status field. If we already have a server running then exit out here.
+
+	// Get Pod Status based on this Server
+	var childPods core.PodList
+	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingField(ownerKey, req.Name)); err != nil {
+		log.Error(err, "unable to list child Pods")
+		return ctrl.Result{}, err
+	}
 
 	pod, err := r.constructPod(&mcServer)
 	if err != nil {
